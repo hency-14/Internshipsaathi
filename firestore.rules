@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// Security rules for InternshipSaathi (students + recruiters).
+// Deploy with:  firebase deploy --only firestore:rules
+//
+// Note: these are development-friendly rules — every rule still requires an
+// authenticated user, but they intentionally allow the cross-role reads the
+// app needs (a recruiter reading an applicant's profile, updating an
+// application's status). Tighten further before a real production launch.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Account record (role). Only the owner can read/write their own.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Student profiles: any signed-in user may read (recruiters view
+    // applicants); only the student can write their own.
+    match /students/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Recruiter profiles: readable by signed-in users; only the owner writes.
+    match /recruiters/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Internships: readable by any signed-in user. Writes allowed for
+    // development/seeding (a recruiter manages their own; students may seed).
+    match /internships/{id} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+
+    // Applications: a student creates their own; recruiters read them and
+    // update their status.
+    match /applications/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+                    && request.resource.data.studentId == request.auth.uid;
+      allow update, delete: if signedIn();
+    }
+  }
+}
